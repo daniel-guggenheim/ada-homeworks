@@ -1,25 +1,34 @@
-import pandas as pd
-import numpy as np
 import os
 import re
-import nltk
-from nltk.tokenize import RegexpTokenizer
-from nltk.stem.snowball import SnowballStemmer
-from nltk.stem.porter import PorterStemmer
-from nltk.tokenize import word_tokenize, sent_tokenize
 import string
 
-## global variables
-english_vocab = None
-stopwords = None
-re_word_filter = None
+import nltk
+import pandas as pd
+from nltk.tokenize import RegexpTokenizer
+from nltk.tokenize import word_tokenize, sent_tokenize
 
-def getTokenMapFromData():
+'''
+This file contains the helper function getTokenMapFromData(). This function is executing
+the same work than the cleaning that was done in Ex. 5.1. Therefore, it will not be
+commented and explained, as you can find the explanation on part 5.1.
+
+'''
+
+def getTokenMapFromData(use_english_vocab):
+    '''
+    Import the data, clean it, and return a list of list of tokens.
+    The list id corresponds to the clean data index. The list of tokens corresponds
+    to the words in the email of the corresponding index.
+    :param use_english_vocab: Boolean, true if we want to remove the words that are not in
+    the english vocabulary list, false otherwise.
+    :return: List of list of tokens per email
+    '''
     print('Starting to import data')
     filename = os.path.join('hillary-clinton-emails', 'Emails.csv')
     df = pd.read_csv(filename)
+    df = df.dropna(axis=0, how='any', subset=['ExtractedBodyText'])
     extractedBodyText = df['ExtractedBodyText']
-    extractedBodyText.fillna("", inplace=True)
+    # extractedBodyText.fillna("", inplace=True)
 
     print('Starting cleaning...')
     extractedBodyText2 = extractedBodyText.apply(lambda x: re.sub('<.*>', ' ', x))
@@ -42,79 +51,44 @@ def getTokenMapFromData():
     del extractedBodyText4
 
     stopwords = nltk.corpus.stopwords.words('english')
+    stopwords.append('Fwd')
     english_vocab = set(w.lower() for w in nltk.corpus.words.words())
     punctuations = list(string.punctuation)
     punctuations.append("''")
 
     print('Creating tokens...')
-    token_list = [get_tokens(mail, stopwords, english_vocab, punctuations) for mail in extractedBodyText5]
+    list_of_token_list = [get_tokens(mail, stopwords, english_vocab, punctuations, use_english_vocab) for mail in extractedBodyText5]
+    mapping_index_to_tokens = {}
+    df_index_list = list(df.index)
+    print('list token len=',len(list_of_token_list))
+    print('list index len=', len(df_index_list))
+    for i in range(0,len(list_of_token_list)):
+        mapping_index_to_tokens[df_index_list[i]] = list_of_token_list[i]
     print('Finished!')
-    return token_list
+    return mapping_index_to_tokens
 
 
-def get_tokens(mail, stopwords, english_vocab, punctuations):
+def get_tokens(mail, stopwords, english_vocab, punctuations, use_english_vocab):
+    '''
+    Take an email text and transform it in a list of tokens.
+    :param mail: mail that we want to transform in list of tokens
+    :param stopwords:  previously initialized list of stopwords
+    :param english_vocab: previously initialized list of english vocabulary
+    :param punctuations: previously initialized list of punctuations
+    :param use_english_vocab: Boolean, true if we want to filter the words that are not in
+    the english vocabulary list, false otherwise
+    :return: list of tokens
+    '''
     tokenizer = RegexpTokenizer(r'\w+')
     tokenizer.tokenize('Eighty-seven miles to go, yet.  Onward!')
     tokens = [word for sent in sent_tokenize(mail) for word in word_tokenize(sent)]
     noStopWords = [word for word in tokens if word not in stopwords]
+
     #Code from https://stackoverflow.com/questions/23317458/how-to-remove-punctuation
     noStopWords = [i for i in noStopWords if i not in punctuations]
     noStopWords = [i.strip("".join(punctuations)) for i in noStopWords if i not in punctuations]
-    # noStopWords = [token for token in noStopWords (lambda word: word not in ',.:;-', noStopWords)
-    # englishWords = [word for word in noStopWords if word in english_vocab]
-    return noStopWords
-
-
-
-
-    # global english_vocab
-    # global stopwords
-    # global re_word_filter
-    #
-    # stopwords = nltk.corpus.stopwords.words('english')
-    # english_vocab = set(w.lower() for w in nltk.corpus.words.words())
-    #
-    # # extend set of stopwords modals with modal verbs
-    # stopwords = stopwords + ['could', 'may', 'might', 'must', 'ought to', 'shall', 'would']
-    #
-    # emails_file = os.path.join('hillary-clinton-emails', 'Emails.csv')
-    # topic_modeling_df = pd.read_csv(emails_file)
-    # topic_modeling_df = topic_modeling_df.dropna(subset=['ExtractedBodyText'], how='all')
-    #
-    # print('Removing words too short...')
-    # re_word_filter = re_longer_than(4)
-    #
-    # print('Getting tokens...')
-    # stem_tokens = get_df_mapped_tokens(topic_modeling_df, 'RawText')
-    #
-    # print('Finished!')
-    # return stem_tokens
-
-
-def re_longer_than(N):
-    return re.compile('^[a-z]{' + '{0},'.format(N) + '}')
-
-
-def preprocess_msg(msg):
-    sentences = nltk.sent_tokenize(msg)
-    del sentences[:6]
-    del sentences[-7:]
-
-    tokens = []
-    for s in sentences:
-        curr_tokens = nltk.word_tokenize(s)
-        curr_tokens = [word for word in curr_tokens if word in english_vocab]
-        curr_tokens = [word for word in curr_tokens if word not in stopwords]
-        tokens = tokens + curr_tokens
-
-    return tokens
-
-
-def get_df_mapped_tokens(df, column_name):
-    rowIdToEmailMap = {}
-
-    def makeRowIdToRawTextMapping(row):
-        rowIdToEmailMap[row.name] = row[column_name]
-
-    df.apply(makeRowIdToRawTextMapping, axis=1)
-    return {k: preprocess_msg(v) for k, v in rowIdToEmailMap.items()}
+    if(use_english_vocab):
+        englishWords = [word for word in noStopWords if word in english_vocab]
+        return englishWords
+    else:
+        return noStopWords
